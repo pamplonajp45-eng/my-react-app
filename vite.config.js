@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  // Set base path for GitHub Pages
+  base: "/my-react-app/",
   plugins: [
     react(),
     VitePWA({
@@ -10,8 +12,8 @@ export default defineConfig({
       includeAssets: ["favicon.svg", "click.mp3", "delete.wav", "time.png", "deadline.png"],
       manifest: {
         name: "Clicker Timer",
-        short_name: "Timer",
-        start_url: "/",
+        short_name: "JPDEV Timer",
+        start_url: "/my-react-app/", // Correct path for GitHub Pages
         display: "standalone",
         background_color: "#ffffff",
         theme_color: "#317EFB",
