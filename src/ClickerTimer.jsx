@@ -1,16 +1,15 @@
 import { useState, useEffect } from "react";
-import { color, motion } from "framer-motion";
+import { motion } from "framer-motion";
 
 export default function ClickerTimer() {
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState(() => Number(localStorage.getItem("clickCount")) || 0);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState(() => JSON.parse(localStorage.getItem("clickHistory")) || []);
   const [hasShown25MinReminder, setHasShown25MinReminder] = useState(false);
   
-  
-  const [tasks, setTasks] = useState([]);
+  const [tasks, setTasks] = useState(() => JSON.parse(localStorage.getItem("tasks")) || []);
   const [newTaskText, setNewTaskText] = useState("");
   const [showTaskInput, setShowTaskInput] = useState(false);
 
@@ -27,14 +26,25 @@ export default function ClickerTimer() {
     return () => clearInterval(interval);
   }, [isRunning, isPaused]);
 
-  // Check for 25-minute break reminder
   useEffect(() => {
-    if (isRunning && !isPaused && seconds === 1500 && !hasShown25MinReminder) { // 1500 seconds = 25 minutes
+    if (isRunning && !isPaused && seconds === 1500 && !hasShown25MinReminder) {
       breakReminder.play().catch(err => console.log(err));
       alert("⏰ Time for a break! You've been working for 25 minutes. Take a 5-minute break to recharge! 💪");
       setHasShown25MinReminder(true);
     }
   }, [seconds, isRunning, isPaused, hasShown25MinReminder]);
+
+  useEffect(() => {
+    localStorage.setItem("tasks", JSON.stringify(tasks));
+  }, [tasks]);
+
+  useEffect(() => {
+    localStorage.setItem("clickHistory", JSON.stringify(history));
+  }, [history]);
+
+  useEffect(() => {
+    localStorage.setItem("clickCount", count);
+  }, [count]);
 
   const startTimer = () => {
     setIsRunning(true);
@@ -77,9 +87,9 @@ export default function ClickerTimer() {
   const clearHistory = () => {
     deleteSound.play().catch(err => console.log(err));
     setHistory([]);
+    localStorage.removeItem("clickHistory");
   };
 
-  // Task management functions
   const addTask = () => {
     if (newTaskText.trim()) {
       const newTask = {
@@ -96,16 +106,14 @@ export default function ClickerTimer() {
   };
 
   const toggleTask = (taskId) => {
-    // Don't allow task completion while paused
     if (isPaused) return;
-    clickSound.play().catch(err => console.log(err));
     
-    setTasks(tasks.map(task => 
-      task.id === taskId ? { ...task, completed: !task.completed } : task
+    const task = tasks.find(t => t.id === taskId);
+    
+    setTasks(tasks.map(t => 
+      t.id === taskId ? { ...t, completed: !t.completed } : t
     ));
     
-    // If marking as complete and timer is running, increment count
-    const task = tasks.find(t => t.id === taskId);
     if (!task.completed && isRunning) {
       setCount(count + 1);
       clickSound.play().catch(err => console.log(err));
@@ -121,7 +129,7 @@ export default function ClickerTimer() {
     deleteSound.play().catch(err => console.log(err));
     setTasks(tasks.filter(task => !task.completed));
   };
-    // Format time as HH:MM:SS
+
   const formatTime = (totalSeconds) => {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -129,7 +137,6 @@ export default function ClickerTimer() {
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  // Get productivity level based on tasks per hour
   const getProductivityLevel = (tasksPerHour) => {
     if (tasksPerHour >= 3) return { level: "Super Productive", emoji: "🔥🔥", message: "You're on Fire! 🔥🔥" };
     if (tasksPerHour >= 1.5) return { level: "Productive", emoji: "💪", message: "Well Done, Keep Going 💪" };
@@ -137,19 +144,16 @@ export default function ClickerTimer() {
   };
 
   const tasksPerHour = seconds > 0 ? (count / seconds) * 3600 : 0;
-  const productivity = seconds > 0 ? ((count / seconds) * 60).toFixed(1) : 0;
   const completedTasksCount = tasks.filter(t => t.completed).length;
 
   return (
     <div style={styles.page}>
       <div style={styles.container}>
-        {/* Title with diagonal v2 watermark */}
         <div style={styles.titleWrapper}>
           <h1 style={styles.title}>G!</h1>
           <span style={styles.version}>v2</span>
           <p style={styles.author}>by: JPDEV</p>
         </div>
-        
 
         <motion.p
           key={count}
@@ -164,10 +168,14 @@ export default function ClickerTimer() {
         <p style={styles.timer}>
           {formatTime(seconds)} {isPaused && <span style={styles.pausedText}>(Paused)</span>}
         </p>
-        <h2 style={styles.productivity}>Productivity Score: {getProductivityLevel(tasksPerHour).message}</h2>
+        <h2 style={styles.productivity}>
+          {getProductivityLevel(tasksPerHour).message}
+        </h2>
 
         {!isRunning ? (
-          <button style={{ ...styles.btn, ...styles.startBtn }} onClick={startTimer}>Start</button>
+          <button style={{ ...styles.btn, ...styles.startBtn }} onClick={startTimer}>
+            Start
+          </button>
         ) : (
           <>
             {!isPaused ? (
@@ -186,7 +194,6 @@ export default function ClickerTimer() {
           </>
         )}
 
-        {/* Task Management Section */}
         <div style={styles.taskSection}>
           <div style={styles.taskHeader}>
             <h2 style={styles.sectionTitle}>My Tasks ({completedTasksCount}/{tasks.length})</h2>
@@ -277,7 +284,7 @@ export default function ClickerTimer() {
                 </tr>
               </thead>
               <tbody>
-                {history.map((session, index) => (
+                {[...history].reverse().map((session, index) => (
                   <tr key={index} style={index % 2 === 0 ? styles.rowEven : styles.rowOdd}>
                     <td style={styles.td}>{session.date}</td>
                     <td style={styles.td}>{session.count}</td>
@@ -290,7 +297,9 @@ export default function ClickerTimer() {
           </div>
         )}
 
-        <button style={{ ...styles.btn, ...styles.clearBtn }} onClick={clearHistory}>Clear History</button>
+        <button style={{ ...styles.btn, ...styles.clearBtn }} onClick={clearHistory}>
+          Clear History
+        </button>
       </div>
     </div>
   );
@@ -305,64 +314,107 @@ const styles = {
     fontFamily: "Inter, sans-serif",
     background: "linear-gradient(135deg, #0f2027, #203a43, #2c5364)",
     color: "#fff",
-    padding: "20px"
+    padding: "15px",
+    overflow: "hidden",
+    width: "100vw",
+    boxSizing: "border-box"
   },
   container: {
     textAlign: "center",
-    padding: "25px 35px",
+    padding: "20px",
     borderRadius: "15px",
     backgroundColor: "rgba(0,0,0,0.6)",
     boxShadow: "0 8px 20px rgba(0,0,0,0.5)",
-    minWidth: "320px",
+    width: "100%",
     maxWidth: "500px",
-    width: "100%"
+    boxSizing: "border-box",
+    overflow: "hidden"
   },
   titleWrapper: {
     position: "relative",
-    display: "inline-block",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
     marginBottom: "10px",
-    width:"500px"
+    width: "100%"
   },
-  title: { position: "relative", zIndex: 1, fontSize: "50px", margin: "0", color:"#00cc7a"},
+  title: { 
+    position: "relative", 
+    zIndex: 1, 
+    fontSize: "clamp(40px, 10vw, 50px)", 
+    margin: "0", 
+    color: "#00cc7a"
+  },
   version: {
     position: "absolute",
     top: "-5px",
-    right: "-10px",
-    fontSize: "20px",
+    right: "10px",
+    fontSize: "clamp(16px, 4vw, 20px)",
     color: "#ffffff33",
     fontWeight: "bold",
     transform: "rotate(-25deg)",
     zIndex: 0
   },
-  author: { fontSize: "10px", color: "#bbbbbb5b", margin: "1px 10px" },
-  count: { fontSize: "20px", margin: "10px 0", color: "#f0f0f0" },
-  timer: { fontSize: "80px", margin: "5px 0" },
-  pausedText: { color: "#ffaa00", fontWeight: "bold", fontSize: "14px" },
-  productivity: { fontSize: "20px", margin: "5px 10px", color: "#c0ffc0" },
+  author: { 
+    fontSize: "10px", 
+    color: "#bbbbbb5b", 
+    margin: "5px 0"
+  },
+  count: { 
+    fontSize: "clamp(18px, 5vw, 20px)", 
+    margin: "10px 0", 
+    color: "#f0f0f0" 
+  },
+  timer: { 
+    fontSize: "clamp(50px, 15vw, 80px)", 
+    margin: "10px 0",
+    wordBreak: "break-word"
+  },
+  pausedText: { 
+    color: "#ffaa00", 
+    fontWeight: "bold", 
+    fontSize: "clamp(12px, 3vw, 14px)",
+    display: "block",
+    marginTop: "5px"
+  },
+  productivity: { 
+    fontSize: "clamp(16px, 4.5vw, 20px)", 
+    margin: "10px 0", 
+    color: "#c0ffc0",
+    wordBreak: "break-word"
+  },
   btn: {
     padding: "12px 20px",
-    fontSize: "16px",
+    fontSize: "clamp(14px, 3.5vw, 16px)",
     border: "none",
     borderRadius: "8px",
     cursor: "pointer",
-    margin: "8px",
+    margin: "5px",
     transition: "all 0.2s ease",
-    width: "90%"
+    width: "calc(100% - 10px)",
+    maxWidth: "400px",
+    boxSizing: "border-box",
+    touchAction: "manipulation",
+    WebkitTapHighlightColor: "transparent"
   },
   startBtn: { background: "linear-gradient(to right, #00b09b, #96c93d)", color: "#fff" },
   pauseBtn: { background: "linear-gradient(to right, #f093fb, #f5576c)", color: "#fff" },
   resumeBtn: { background: "linear-gradient(to right, #4facfe, #00f2fe)", color: "#fff" },
-  clickBtn: { background: "linear-gradient(to right, #4facfe, #00f2fe)", color: "#fff" },
   stopBtn: { background: "linear-gradient(to right, #fc5c7d, #6a82fb)", color: "#fff" },
   clearBtn: { background: "#ffffffff", color: "#000000ff" },
-  instruction: { fontSize: "10px", color: "#dddddd", marginTop: "3px" },
+  instruction: { 
+    fontSize: "clamp(9px, 2.5vw, 10px)", 
+    color: "#dddddd", 
+    marginTop: "3px" 
+  },
   
-  // Task management styles
   taskSection: {
-    marginTop: "25px",
+    marginTop: "20px",
     padding: "15px",
     backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: "10px"
+    borderRadius: "10px",
+    width: "100%",
+    boxSizing: "border-box"
   },
   taskHeader: {
     display: "flex",
@@ -373,7 +425,7 @@ const styles = {
     gap: "10px"
   },
   sectionTitle: {
-    fontSize: "18px",
+    fontSize: "clamp(16px, 4vw, 18px)",
     margin: "0",
     color: "#f0f0f0"
   },
@@ -381,19 +433,22 @@ const styles = {
     background: "linear-gradient(to right, #667eea, #764ba2)",
     color: "#fff",
     padding: "8px 16px",
-    fontSize: "14px",
+    fontSize: "clamp(12px, 3vw, 14px)",
     width: "auto",
-    margin: "0"
+    margin: "0",
+    touchAction: "manipulation",
+    WebkitTapHighlightColor: "transparent"
   },
   taskInputWrapper: {
     display: "flex",
     gap: "8px",
     marginBottom: "15px",
-    flexDirection: "column"
+    flexDirection: "column",
+    width: "100%"
   },
   taskInput: {
     padding: "10px",
-    fontSize: "14px",
+    fontSize: "clamp(13px, 3.5vw, 14px)",
     borderRadius: "6px",
     border: "2px solid #667eea",
     backgroundColor: "rgba(255,255,255,0.1)",
@@ -405,13 +460,16 @@ const styles = {
   saveTaskBtn: {
     background: "linear-gradient(to right, #56ab2f, #a8e063)",
     color: "#fff",
-    padding: "8px 16px",
-    fontSize: "14px",
-    margin: "0"
+    padding: "10px 16px",
+    fontSize: "clamp(13px, 3.5vw, 14px)",
+    margin: "0",
+    touchAction: "manipulation",
+    WebkitTapHighlightColor: "transparent"
   },
   taskList: {
     maxHeight: "300px",
     overflowY: "auto",
+    overflowX: "hidden",
     marginBottom: "10px"
   },
   taskItem: {
@@ -429,18 +487,21 @@ const styles = {
     alignItems: "center",
     gap: "10px",
     flex: 1,
-    textAlign: "left"
+    textAlign: "left",
+    overflow: "hidden"
   },
   checkbox: {
     width: "18px",
     height: "18px",
+    minWidth: "18px",
     cursor: "pointer",
     accentColor: "#667eea"
   },
   taskText: {
-    fontSize: "14px",
+    fontSize: "clamp(13px, 3.5vw, 14px)",
     color: "#f0f0f0",
-    wordBreak: "break-word"
+    wordBreak: "break-word",
+    overflow: "hidden"
   },
   taskCompleted: {
     textDecoration: "line-through",
@@ -453,29 +514,63 @@ const styles = {
     borderRadius: "4px",
     color: "#fff",
     cursor: "pointer",
-    padding: "4px 8px",
-    fontSize: "14px",
-    transition: "all 0.2s ease"
+    padding: "6px 10px",
+    fontSize: "clamp(12px, 3vw, 14px)",
+    transition: "all 0.2s ease",
+    minWidth: "30px",
+    touchAction: "manipulation",
+    WebkitTapHighlightColor: "transparent"
   },
   clearCompletedBtn: {
     background: "rgba(255,255,255,0.15)",
     color: "#fff",
-    padding: "8px 16px",
-    fontSize: "14px",
-    margin: "5px 0 0 0"
+    padding: "10px 16px",
+    fontSize: "clamp(12px, 3vw, 14px)",
+    margin: "5px 0 0 0",
+    touchAction: "manipulation",
+    WebkitTapHighlightColor: "transparent"
   },
   emptyState: {
     color: "#aaa",
-    fontSize: "14px",
+    fontSize: "clamp(12px, 3.5vw, 14px)",
     fontStyle: "italic",
     margin: "15px 0"
   },
   
-  historyTitle: { marginTop: "20px" },
-  historyTableWrapper: { maxHeight: "250px", overflowY: "auto", overflowX: "auto", margin: "0 auto" },
-  historyTable: { width: "100%", borderCollapse: "collapse" },
-  th: { padding: "8px", backgroundColor: "#53c172ff", border: "1px solid #4dab68ff" },
-  td: { padding: "8px", textAlign: "center" },
+  historyTitle: { 
+    marginTop: "20px",
+    fontSize: "clamp(16px, 4vw, 18px)"
+  },
+  historyTableWrapper: { 
+    maxHeight: "280px",
+    overflowY: "auto", 
+    overflowX: "auto", 
+    margin: "10px auto",
+    width: "100%",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: "8px",
+    backgroundColor: "rgba(0,0,0,0.3)"
+  },
+  historyTable: { 
+    width: "100%", 
+    borderCollapse: "collapse",
+    fontSize: "clamp(11px, 3vw, 13px)"
+  },
+  th: { 
+    padding: "10px 4px", 
+    backgroundColor: "#53c172ff", 
+    border: "1px solid #4dab68ff",
+    fontSize: "clamp(11px, 3vw, 13px)",
+    position: "sticky",
+    top: 0,
+    zIndex: 10
+  },
+  td: { 
+    padding: "8px 4px", 
+    textAlign: "center",
+    fontSize: "clamp(10px, 2.5vw, 12px)",
+    wordBreak: "break-word"
+  },
   rowEven: { backgroundColor: "#ffffff11" },
   rowOdd: { backgroundColor: "#ffffff22" }
 };
