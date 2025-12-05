@@ -4,57 +4,129 @@ export default function ClickerTimer() {
   const [count, setCount] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [seconds, setSeconds] = useState(0);
+  const [seconds, setSeconds] = useState(25 * 60); // Start at 25 minutes
   const [history, setHistory] = useState([]);
-  const [hasShown25MinReminder, setHasShown25MinReminder] = useState(false);
+  const [pomodoroCount, setPomodoroCount] = useState(0);
+  const [mode, setMode] = useState('work'); // 'work', 'shortBreak', 'longBreak'
   
   const [tasks, setTasks] = useState([]);
   const [newTaskText, setNewTaskText] = useState("");
   const [showTaskInput, setShowTaskInput] = useState(false);
 
-  // Audio initialization
+  const WORK_TIME = 25 * 60; // 25 minutes
+  const SHORT_BREAK = 5 * 60; // 5 minutes
+  const LONG_BREAK = 15 * 60; // 15 minutes
+
   const playSound = (type) => {
+    let src = '';
+    switch(type) {
+      case 'click': src = 'click.mp3'; break;
+      case 'delete': src = 'delete.wav'; break;
+      case 'reminder': src = 'reminder.mp3'; break;
+      case 'timer': src = 'timer.mp3'; break;
+      default: src = ''; 
+    }
     try {
-      const audio = new Audio(
-        type === 'click' ? 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3' :
-        type === 'delete' ? 'https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3' :
-        'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'
-      );
-      audio.volume = 0.3;
+      const audio = new Audio(src);
+      audio.volume = 1;
       audio.play().catch(() => {});
-    } catch (e) {}
+    } catch(e) {}
   };
 
+  // Load data from localStorage on mount
+  useEffect(() => {
+    const countData = localStorage.getItem('clickCount');
+    if (countData) setCount(Number(countData));
+
+    const historyData = localStorage.getItem('clickHistory');
+    if (historyData) setHistory(JSON.parse(historyData));
+
+    const tasksData = localStorage.getItem('tasks');
+    if (tasksData) setTasks(JSON.parse(tasksData));
+
+    const pomodoroData = localStorage.getItem('pomodoroCount');
+    if (pomodoroData) setPomodoroCount(Number(pomodoroData));
+  }, []);
+
+  // Save to localStorage
+  useEffect(() => {
+    localStorage.setItem('tasks', JSON.stringify(tasks));
+  }, [tasks]);
+
+  useEffect(() => {
+    localStorage.setItem('clickHistory', JSON.stringify(history));
+  }, [history]);
+
+  useEffect(() => {
+    localStorage.setItem('clickCount', count);
+  }, [count]);
+
+  useEffect(() => {
+    localStorage.setItem('pomodoroCount', pomodoroCount);
+  }, [pomodoroCount]);
+
+  // Timer countdown logic
   useEffect(() => {
     if (!isRunning || isPaused) return;
-    const interval = setInterval(() => setSeconds(s => s + 1), 1000);
+    
+    const interval = setInterval(() => {
+      setSeconds(s => {
+        if (s <= 1) {
+          // Timer finished!
+          handleTimerComplete();
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    
     return () => clearInterval(interval);
-  }, [isRunning, isPaused]);
+  }, [isRunning, isPaused, mode]);
 
-  useEffect(() => {
-    if (isRunning && !isPaused && seconds === 1500 && !hasShown25MinReminder) {
-      playSound('reminder');
-      alert("⏰ Time for a break! You've been working for 25 minutes. Take a 5-minute break to recharge! 💪");
-      setHasShown25MinReminder(true);
+  const handleTimerComplete = () => {
+    playSound('reminder');
+    
+    if (mode === 'work') {
+      // Work session completed
+      const newPomodoroCount = pomodoroCount + 1;
+      setPomodoroCount(newPomodoroCount);
+      
+      // Save work session to history
+      const session = {
+        count,
+        seconds: WORK_TIME,
+        date: new Date().toLocaleString(),
+        productivity: `Pomodoro #${newPomodoroCount}`
+      };
+      setHistory([...history, session]);
+      
+      // Decide break type
+      if (newPomodoroCount % 4 === 0) {
+        // Long break after 4 pomodoros
+        setMode('longBreak');
+        setSeconds(LONG_BREAK);
+        alert("🎉 Great work! Time for a 15-minute long break!");
+      } else {
+        // Short break
+        setMode('shortBreak');
+        setSeconds(SHORT_BREAK);
+        alert("✅ Pomodoro complete! Take a 5-minute break.");
+      }
+    } else {
+      // Break completed
+      setMode('work');
+      setSeconds(WORK_TIME);
+      setCount(0); // Reset task count for new work session
+      alert("💪 Break's over! Ready for another focused session?");
     }
-  }, [seconds, isRunning, isPaused, hasShown25MinReminder]);
-  useEffect(() => {
-  const countData = localStorage.getItem('clickCount');
-  if (countData) setCount(Number(countData));
-
-  const historyData = localStorage.getItem('clickHistory');
-  if (historyData) setHistory(JSON.parse(historyData));
-
-  const tasksData = localStorage.getItem('tasks');
-  if (tasksData) setTasks(JSON.parse(tasksData));
-}, []); // ← run only once on first render
+  };
 
   const startTimer = () => {
     setIsRunning(true);
     setIsPaused(false);
-    setCount(0);
-    setSeconds(0);
-    setHasShown25MinReminder(false);
+    if (mode === 'work') {
+      setCount(0);
+    }
     playSound('click');
   };
 
@@ -72,23 +144,59 @@ export default function ClickerTimer() {
     setIsRunning(false);
     setIsPaused(false);
     playSound('reminder');
-    if (count > 0) {
-      const tasksPerHour = seconds > 0 ? (count / seconds) * 3600 : 0;
-      const productivityLevel = getProductivityLevel(tasksPerHour).level;
-      
+    
+    // Save current session if it was a work session
+    if (mode === 'work' && count > 0) {
       const session = {
         count,
-        seconds,
+        seconds: WORK_TIME - seconds,
         date: new Date().toLocaleString(),
-        productivity: productivityLevel
+        productivity: 'Incomplete'
       };
       setHistory([...history, session]);
     }
+    
+    // Reset to work mode
+    setMode('work');
+    setSeconds(WORK_TIME);
+    setCount(0);
+  };
+
+  const skipToBreak = () => {
+    if (mode === 'work') {
+      const newPomodoroCount = pomodoroCount + 1;
+      setPomodoroCount(newPomodoroCount);
+      
+      if (newPomodoroCount % 4 === 0) {
+        setMode('longBreak');
+        setSeconds(LONG_BREAK);
+      } else {
+        setMode('shortBreak');
+        setSeconds(SHORT_BREAK);
+      }
+      playSound('click');
+    }
+  };
+
+  const skipToWork = () => {
+    setMode('work');
+    setSeconds(WORK_TIME);
+    setCount(0);
+    playSound('click');
   };
 
   const clearHistory = () => {
     playSound('delete');
     setHistory([]);
+    localStorage.removeItem('clickHistory');
+  };
+
+  const resetPomodoros = () => {
+    if (confirm('Reset pomodoro count to 0?')) {
+      setPomodoroCount(0);
+      localStorage.removeItem('pomodoroCount');
+      playSound('delete');
+    }
   };
 
   const addTask = () => {
@@ -107,7 +215,7 @@ export default function ClickerTimer() {
   }; 
   
   const toggleTask = (taskId) => {
-    if (isPaused) return;
+    if (isPaused || mode !== 'work') return;
     
     const task = tasks.find(t => t.id === taskId);
     
@@ -132,20 +240,22 @@ export default function ClickerTimer() {
   };
 
   const formatTime = (totalSeconds) => {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const minutes = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  const getProductivityLevel = (tasksPerHour) => {
-    if (tasksPerHour >= 3) return { level: "Super Productive", emoji: "🔥🔥", message: "You're on Fire! 🔥🔥" };
-    if (tasksPerHour >= 1.5) return { level: "Productive", emoji: "💪", message: "Well Done, Keep Going 💪" };
-    return { level: "Not Enough Productive", emoji: "⚡", message: "Warming Up ⚡" };
+  const getModeDisplay = () => {
+    switch(mode) {
+      case 'work': return { text: '🔥 Focus Time', color: '#00cc7a' };
+      case 'shortBreak': return { text: '☕ Short Break', color: '#4facfe' };
+      case 'longBreak': return { text: '🌴 Long Break', color: '#f093fb' };
+      default: return { text: 'Work', color: '#00cc7a' };
+    }
   };
 
-  const tasksPerHour = seconds > 0 ? (count / seconds) * 3600 : 0;
   const completedTasksCount = tasks.filter(t => t.completed).length;
+  const modeDisplay = getModeDisplay();
 
   return (
     <div style={styles.page}>
@@ -156,26 +266,38 @@ export default function ClickerTimer() {
           <p style={styles.author}>by: JPDEV</p>
         </div>
 
-        <div
-          key={count}
-          style={{
-            ...styles.count,
-            animation: 'pulse 0.3s ease'
-          }}
-        >
-          Tasks Completed: {count}
+        <div style={{...styles.modeIndicator, backgroundColor: modeDisplay.color}}>
+          {modeDisplay.text}
         </div>
+
+        <div style={styles.pomodoroCount}>
+          🍅 Pomodoros: {pomodoroCount}
+          {pomodoroCount > 0 && (
+            <button style={styles.resetPomodoroBtn} onClick={resetPomodoros}>
+              ↻
+            </button>
+          )}
+        </div>
+
+        {mode === 'work' && (
+          <div
+            key={count}
+            style={{
+              ...styles.count,
+              animation: 'pulse 0.3s ease'
+            }}
+          >
+            Tasks Completed: {count}
+          </div>
+        )}
 
         <p style={styles.timer}>
           {formatTime(seconds)} {isPaused && <span style={styles.pausedText}>(Paused)</span>}
         </p>
-        <h2 style={styles.productivity}>
-          {getProductivityLevel(tasksPerHour).message}
-        </h2>
 
         {!isRunning ? (
           <button style={{ ...styles.btn, ...styles.startBtn }} onClick={startTimer}>
-            Start
+            Start {mode === 'work' ? 'Pomodoro' : 'Break'}
           </button>
         ) : (
           <>
@@ -189,83 +311,105 @@ export default function ClickerTimer() {
               </button>
             )}
             <button style={{ ...styles.btn, ...styles.stopBtn }} onClick={stopTimer}>
-              It's a wrap!
-              <p style={styles.instruction}>Click this button if you're done.</p>
+              Stop & Reset
             </button>
           </>
         )}
 
-        <div style={styles.taskSection}>
-          <div style={styles.taskHeader}>
-            <h2 style={styles.sectionTitle}>My Tasks ({completedTasksCount}/{tasks.length})</h2>
-            <button 
-              style={{ ...styles.btn, ...styles.addTaskBtn }} 
-              onClick={() => setShowTaskInput(!showTaskInput)}
-            >
-              {showTaskInput ? "Cancel" : "+ Add Task"}
+        <div style={styles.skipButtons}>
+          {mode === 'work' ? (
+            <button style={{ ...styles.btn, ...styles.skipBtn }} onClick={skipToBreak}>
+              Skip to Break →
             </button>
-          </div>
-
-          {showTaskInput && (
-            <div style={styles.taskInputWrapper}>
-              <input
-                type="text"
-                value={newTaskText}
-                onChange={(e) => setNewTaskText(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && addTask()}
-                placeholder="Enter your task..."
-                style={styles.taskInput}
-                autoFocus
-              />
-              <button style={{ ...styles.btn, ...styles.saveTaskBtn }} onClick={addTask}>
-                Save
-              </button>
-            </div>
-          )}
-
-          {tasks.length === 0 ? (
-            <p style={styles.emptyState}>Let the productivity begin! ✨</p>
           ) : (
-            <div style={styles.taskList}>
-              {tasks.map((task) => (
-                <div
-                  key={task.id}
-                  style={styles.taskItem}
-                >
-                  <div style={styles.taskContent}>
-                    <input
-                      type="checkbox"
-                      checked={task.completed}
-                      onChange={() => toggleTask(task.id)}
-                      style={styles.checkbox}
-                    />
-                    <span style={{
-                      ...styles.taskText,
-                      ...(task.completed ? styles.taskCompleted : {})
-                    }}>
-                      {task.text}
-                    </span>
-                  </div>
-                  <button 
-                    style={styles.deleteTaskBtn} 
-                    onClick={() => deleteTask(task.id)}
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {tasks.some(t => t.completed) && (
-            <button 
-              style={{ ...styles.btn, ...styles.clearCompletedBtn }} 
-              onClick={clearCompletedTasks}
-            >
-              Clear Completed
+            <button style={{ ...styles.btn, ...styles.skipBtn }} onClick={skipToWork}>
+              Skip to Work →
             </button>
           )}
         </div>
+
+        {mode === 'work' && (
+          <div style={styles.taskSection}>
+            <div style={styles.taskHeader}>
+              <h2 style={styles.sectionTitle}>My Tasks ({completedTasksCount}/{tasks.length})</h2>
+              <button 
+                style={{ ...styles.btn, ...styles.addTaskBtn }} 
+                onClick={() => setShowTaskInput(!showTaskInput)}
+              >
+                {showTaskInput ? "Cancel" : "+ Add Task"}
+              </button>
+            </div>
+
+            {showTaskInput && (
+              <div style={styles.taskInputWrapper}>
+                <input
+                  type="text"
+                  value={newTaskText}
+                  onChange={(e) => setNewTaskText(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && addTask()}
+                  placeholder="Enter your task..."
+                  style={styles.taskInput}
+                  autoFocus
+                />
+                <button style={{ ...styles.btn, ...styles.saveTaskBtn }} onClick={addTask}>
+                  Save
+                </button>
+              </div>
+            )}
+
+            {tasks.length === 0 ? (
+              <p style={styles.emptyState}>Let the productivity begin! ✨</p>
+            ) : (
+              <div style={styles.taskList}>
+                {tasks.map((task) => (
+                  <div
+                    key={task.id}
+                    style={styles.taskItem}
+                  >
+                    <div style={styles.taskContent}>
+                      <input
+                        type="checkbox"
+                        checked={task.completed}
+                        onChange={() => toggleTask(task.id)}
+                        style={styles.checkbox}
+                        disabled={!isRunning || isPaused}
+                      />
+                      <span style={{
+                        ...styles.taskText,
+                        ...(task.completed ? styles.taskCompleted : {})
+                      }}>
+                        {task.text}
+                      </span>
+                    </div>
+                    <button 
+                      style={styles.deleteTaskBtn} 
+                      onClick={() => deleteTask(task.id)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tasks.some(t => t.completed) && (
+              <button 
+                style={{ ...styles.btn, ...styles.clearCompletedBtn }} 
+                onClick={clearCompletedTasks}
+              >
+                Clear Completed
+              </button>
+            )}
+          </div>
+        )}
+
+        {mode !== 'work' && (
+          <div style={styles.breakMessage}>
+            <p style={styles.breakText}>
+              {mode === 'shortBreak' ? '☕ Take a short break! Stretch, hydrate, or rest your eyes.' : '🌴 Long break time! Step away and recharge for the next set.'}
+            </p>
+          </div>
+        )}
 
         <h2 style={styles.historyTitle}>History</h2>
         {history.length === 0 ? (
@@ -278,7 +422,7 @@ export default function ClickerTimer() {
                   <th style={styles.th}>Date</th>
                   <th style={styles.th}>Tasks</th>
                   <th style={styles.th}>Time</th>
-                  <th style={styles.th}>Productivity</th>
+                  <th style={styles.th}>Session</th>
                 </tr>
               </thead>
               <tbody>
@@ -375,6 +519,39 @@ const styles = {
     margin: "8px 0 0 0",
     letterSpacing: "1px"
   },
+  modeIndicator: {
+    padding: "10px 20px",
+    borderRadius: "25px",
+    fontSize: "clamp(15px, 4vw, 18px)",
+    fontWeight: "700",
+    margin: "16px auto",
+    display: "inline-block",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.2)"
+  },
+  pomodoroCount: {
+    fontSize: "clamp(16px, 4vw, 18px)",
+    margin: "12px 0",
+    color: "#ffd700",
+    fontWeight: "600",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "10px"
+  },
+  resetPomodoroBtn: {
+    background: "rgba(255,255,255,0.2)",
+    border: "none",
+    borderRadius: "50%",
+    color: "#fff",
+    width: "28px",
+    height: "28px",
+    cursor: "pointer",
+    fontSize: "16px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "background 0.2s ease"
+  },
   count: { 
     fontSize: "clamp(18px, 5vw, 22px)", 
     margin: "16px 0", 
@@ -396,13 +573,6 @@ const styles = {
     display: "block",
     marginTop: "8px",
     letterSpacing: "0.5px"
-  },
-  productivity: { 
-    fontSize: "clamp(17px, 5vw, 22px)", 
-    margin: "12px 0 20px 0", 
-    color: "#c0ffc0",
-    fontWeight: "600",
-    wordBreak: "normal"
   },
   btn: {
     padding: "14px 24px",
@@ -442,13 +612,28 @@ const styles = {
     color: "#000",
     marginTop: "16px"
   },
-  instruction: { 
-    fontSize: "clamp(10px, 2.5vw, 11px)", 
-    color: "rgba(255,255,255,0.8)", 
-    marginTop: "4px",
-    fontWeight: "400"
+  skipButtons: {
+    margin: "10px 0"
   },
-  
+  skipBtn: {
+    background: "rgba(255,255,255,0.15)",
+    color: "#fff",
+    padding: "10px 20px",
+    fontSize: "clamp(13px, 3.5vw, 15px)"
+  },
+  breakMessage: {
+    margin: "24px 0",
+    padding: "20px",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: "12px",
+    border: "2px dashed rgba(255,255,255,0.3)"
+  },
+  breakText: {
+    fontSize: "clamp(14px, 3.8vw, 16px)",
+    color: "#f0f0f0",
+    margin: 0,
+    lineHeight: "1.5"
+  },
   taskSection: {
     marginTop: "24px",
     padding: "20px",
@@ -590,7 +775,6 @@ const styles = {
     margin: "20px 0",
     lineHeight: "1.5"
   },
-  
   historyTitle: { 
     marginTop: "24px",
     fontSize: "clamp(17px, 4.5vw, 20px)",
