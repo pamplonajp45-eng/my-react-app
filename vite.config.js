@@ -11,12 +11,12 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "click.mp3", "delete.wav", "time.png", "deadline.png"],
       manifest: {
-        name: "Clicker Timer",
-        short_name: "JPDEV Timer",
+        name: "G?",
+        short_name: "G!",
         start_url: "/my-react-app/", // Correct path for GitHub Pages
         display: "standalone",
-        background_color: "#ffffff",
-        theme_color: "#317EFB",
+        background_color: "#0f2027",
+        theme_color: "#203a43",
         icons: [
           {
             src: "time.png",
@@ -24,7 +24,7 @@ export default defineConfig({
             type: "image/png"
           },
           {
-            src: "deadline.png",
+            src: "time.png",
             sizes: "512x512",
             type: "image/png"
           }

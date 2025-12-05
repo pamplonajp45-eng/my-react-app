@@ -1,13 +1,13 @@
 {
-  "name": "JP_DEV'S Clicker Timer",
-  "short_name": "Timer",
+  "name": "G?",
+  "short_name": "G!",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#317EFB",
   "icons": [
     {
-      "src": "/deadline.png",
+      "src": "/time.png",
       "sizes": "192x192",
       "type": "image/png"
     },
