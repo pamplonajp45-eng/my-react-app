@@ -306,18 +306,20 @@ export default function ClickerTimer() {
 }
 
 const styles = {
-  page: {
+   page: {
     display: "flex",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     alignItems: "center",
     minHeight: "100vh",
+    height: "auto",
     fontFamily: "Inter, sans-serif",
-    background: "linear-gradient(135deg, #0f2027, #203a43, #2c5364)",
+    background: "transparent",
     color: "#fff",
     padding: "15px",
-    overflow: "hidden",
-    width: "100vw",
-    boxSizing: "border-box"
+    paddingBottom: "30px",
+    width: "100%",
+    boxSizing: "border-box",
+    flexDirection: "column"
   },
   container: {
     textAlign: "center",
